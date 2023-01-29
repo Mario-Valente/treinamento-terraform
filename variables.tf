@@ -1,0 +1,1 @@
+variable "aws_iam_user"{}
