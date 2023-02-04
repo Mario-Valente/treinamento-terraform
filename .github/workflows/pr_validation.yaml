@@ -59,32 +59,6 @@ jobs:
         run: terraform show -no-color plan.out
         continue-on-error: true
 
-      - uses: actions/github-script@v6
-        if: github.event_name == 'pull_request'
-        env:
-          PLAN: "terraform\n${{ steps.tf_show.outputs.stdout }}"
-        with:
-          script: |
-            const output = `#### Terraform Initialization ⚙️\`${{ steps.tf_init.outcome }}\`
-            #### Terraform Plan 📖\`${{ steps.tf_plan.outcome }}\`
-            #### Terraform Validation 🤖\`${{ steps.tf_validate.outcome }}\`
-
-            <details><summary>Show Plan</summary>
-
-            \`\`\`\n
-            ${process.env.PLAN}
-            \`\`\`
-
-            </details>
-
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
 
       - name: Terraform Plan Status
         if: steps.tf_plan.outcome == 'failure'
