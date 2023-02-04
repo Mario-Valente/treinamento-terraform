@@ -1,0 +1,91 @@
+name: pr validation terraform
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    
+env:
+  AWS_ACCESS_KEY_ID: "${{secrets.AWS_ACCESS_KEY_ID}}"
+  AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+  AWS_REGION: "${{ secrets.AWS_REGION }}"
+
+concurrency:
+  group: ${{github.workflow}}
+  cancel-in-progress: true
+
+jobs:
+  
+  terraform-plan:
+    runs-on: ${{matrix.os}}
+  
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        terraform: [0.13.1]
+
+    steps:
+      - name: checkout 🛎
+        uses: actions/checkout@master
+
+          
+      - name: Aws credentions
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Terrafom
+        uses: hashicorp/setup-terraform@v1.2.1
+        with:
+          terraform_version: ${{ matrix.terraform }}
+
+      - name: Terraform Init
+        id: tf_init
+        run: terraform init
+      
+      - name: Terraform Validade 
+        id: tf_validate
+        run: terraform validate -no-color 
+
+      - name: terraform plan 
+        id: tf-plan 
+        run: terraform plan -out=plan.out -input=false -lock=false
+        continue-on-error: true
+
+      - name: terraform show plan
+        id: tf_show
+        run: terraform show -no-color plan.out
+        continue-on-error: true
+
+      - uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        env:
+          PLAN: "terraform\n${{ steps.tf_show.outputs.stdout }}"
+        with:
+          script: |
+            const output = `#### Terraform Initialization ⚙️\`${{ steps.tf_init.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.tf_plan.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.tf_validate.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`\n
+            ${process.env.PLAN}
+            \`\`\`
+
+            </details>
+
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Plan Status
+        if: steps.tf_plan.outcome == 'failure'
+        run: exit 1
